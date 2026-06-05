@@ -21,14 +21,22 @@ df.loc[[10, 35], 'category'] = np.nan
 print(df.head())
 print(df.info())
 # 1-1 price 결측치를 중앙값으로 대체한 뒤, price 평균을 소수 둘째 자리까지 출력하시오.
-
+df['price'] = df['price'].fillna(df['price'].median())
+print(f"{df['price'].mean():.2f}")
 # 1-2 category 결측치를 최빈값으로 대체한 뒤, category별 평균 rating을 구하고 평균 rating이 가장 높은 category를 출력하시오.
-
+df['category'] = df['category'].fillna(df['category'].mode()[0])
+print(df.groupby('category')['rating'].mean())
+print(df.groupby('category')['rating'].mean().idxmax())
 # 1-3 rating 결측치를 중앙값으로 대체한 뒤, age >= 40이고 rating >= 4.2인 행의 개수를 출력하시오.
-
+df['rating'] = df['rating'].fillna(df['rating'].median())
+cnt = ((df['age'] >= 40) & (df['rating'] >= 4.2)).sum()
+print(cnt)
 # 1-4 total = quantity * price 컬럼을 만들고, total이 가장 큰 상위 7개의 평균을 출력하시오.
-
+df['total'] = df['quantity'] * df['price']
+print(df['total'].sort_values(ascending = False).head(7).mean())
 # 1-5 store별 총 quantity를 구하고, 총 quantity가 가장 큰 store를 출력하시오.
+print(df.groupby('store')['quantity'].sum())
+print(df.groupby('store')['quantity'].sum().idxmax())
 
 # 문제 2
 import pandas as pd
@@ -93,10 +101,84 @@ print(train.info())
 # test_size=0.3
 # 검증 데이터 RMSE를 출력하시오.
 
+print(train.shape, train['product_id'].nunique())
+X = train.drop(['product_id', 'target'], axis = 1)
+y = train['target']
+
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+
+num_columns = X.select_dtypes('number').columns.tolist()
+cat_columns = X.select_dtypes('object').columns.tolist()
+
+num_preprocess = make_pipeline(SimpleImputer(strategy = 'mean'))
+cat_preprocess = make_pipeline(SimpleImputer(strategy = 'most_frequent'),
+                             OneHotEncoder(handle_unknown = 'ignore', sparse_output = False))
+
+preprocess = ColumnTransformer([
+    ('num', num_preprocess, num_columns),
+    ('cat', cat_preprocess, cat_columns)
+])
+
+pipe = Pipeline([
+    ('preprocess', preprocess),
+    ('regressor', RandomForestRegressor(random_state = 42))
+])
+
+train_X, valid_X, train_y, valid_y = train_test_split(
+    X,
+    y,
+    test_size = 0.3,
+    random_state = 42
+)
+pipe.fit(train_X, train_y)
+pred = pipe.predict(valid_X)
+
+from sklearn.metrics import mean_squared_error
+
+print(np.sqrt(mean_squared_error(valid_y, pred)))
+
+
 # 2-2 전체 train 데이터로 다시 학습한 뒤, test 데이터 예측값을 result_reg3.csv로 저장하시오.
 # 컬럼명은 pred로 하시오.
 
+pipe.fit(X,y)
+test_X = test.drop(['product_id', 'target'], axis = 1, errors='ignore')
+pred = pipe.predict(test_X)
+pred = pd.DataFrame(pred, columns = ['pred'])
+pred.to_csv('result_reg3.csv', index=  False)
 # 2-3 product_id를 포함한 경우와 제외한 경우의 RMSE를 비교하고, 어떤 쪽을 선택할지 한 문장으로 설명하시오.
+
+X2 = train.drop(columns = 'target')
+y2 = train['target']
+
+num_columns2 = X2.select_dtypes('number').columns.tolist()
+cat_columns2 = X2.select_dtypes('object').columns.tolist()
+
+preprocess2 = ColumnTransformer([
+    ('num', num_preprocess, num_columns2),
+    ('cat', cat_preprocess, cat_columns2)
+])
+
+pipe2 = Pipeline([
+    ('preprocess', preprocess2),
+    ('regressor', RandomForestRegressor(random_state = 42))
+])
+
+train_X2, valid_X2, train_y2, valid_y2 = train_test_split(
+    X2,
+    y2,
+    test_size = 0.3,
+    random_state = 42
+)
+pipe2.fit(train_X2, train_y2)
+pred2 = pipe2.predict(valid_X2)
+print(np.sqrt(mean_squared_error(valid_y2, pred2)))
+print('X에서 product_id컬럼을 포함한 경우가 X에서 product_id컬럼을 제외한 경우보다 RMSE가 더 높게 나왔기 때문에 X에서 product_id컬럼을 제외한 모델을 채택한다.')
 
 # 문제 3
 import pandas as pd
@@ -161,11 +243,66 @@ print(train['target'].value_counts())
 # test_size=0.3
 # 검증 데이터의 accuracy, f1_macro, AUC를 출력하시오.
 
+print(train.shape, train['user_no'].nunique())
+X = train.drop(['user_no', 'target'], axis = 1)
+y = train['target']
+
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+
+num_columns = X.select_dtypes('number').columns.tolist()
+cat_columns = X.select_dtypes('object').columns.tolist()
+
+num_preprocess = make_pipeline(SimpleImputer(strategy = 'mean'))
+cat_preprocess = make_pipeline(SimpleImputer(strategy = 'most_frequent'),
+                               OneHotEncoder(handle_unknown = 'ignore', sparse_output = False))
+
+preprocess = ColumnTransformer([
+    ('num', num_preprocess, num_columns),
+    ('cat', cat_preprocess, cat_columns)
+])
+
+pipe = Pipeline([
+    ('preprocess', preprocess),
+    ('classifier', RandomForestClassifier(random_state = 42))
+])
+train_X, valid_X, train_y, valid_y = train_test_split(
+    X,
+    y,
+    test_size = 0.3,
+    random_state = 42,
+    stratify = y
+)
+
+pipe.fit(train_X, train_y)
+pred = pipe.predict(valid_X)
+prob = pipe.predict_proba(valid_X)[:, 1]
+
+from sklearn.metrics import f1_score, accuracy_score, roc_auc_score
+
+print(f"f1-macro: {f1_score(valid_y, pred, average = 'macro')}")
+print(f"accuracy: {accuracy_score(valid_y, pred)}")
+print(f"AUC: {roc_auc_score(valid_y, prob)}")
 # 3-2 평가 기준이 f1_macro일 때, test 예측값을 result_cls3.csv로 저장하시오.
 # 컬럼명은 pred.
 
+pipe.fit(X, y)
+test_X = test.drop(['user_no', 'target'], axis = 1, errors='ignore')
+pred = pipe.predict(test_X)
+pred = pd.DataFrame(pred, columns = ['pred'])
+pred.to_csv('result_cls3.csv', index = False)
 # 3-3 평가 기준이 AUC일 때, test 예측값을 result_auc3.csv로 저장하시오.
 # 컬럼명은 pred.
+
+pipe.fit(X,y)
+test_X = test.drop(['user_no', 'target'], axis = 1, errors='ignore')
+prob = pipe.predict_proba(test_X)[:, 1]
+prob = pd.DataFrame(prob, columns = ['pred'])
+prob.to_csv('result_auc3.csv', index = False)
 
 # 문제 4
 import numpy as np
@@ -181,6 +318,11 @@ data = np.array([52, 55, 49, 58, 54, 56, 51, 57, 53, 55, 59, 54])
 # 귀무가설
 # 대립가설
 # 결론
+
+stat, pvalue = stats.ttest_1samp(data, popmean = 53, alternative = 'greater')
+print(stat, pvalue)
+print('귀무가설: 크지 않다. 대립가설: 크다')
+print('pvalue가 유의수준인 0.05보다 크기 때문에 귀무가설을 기각할 수 없다. 따라서 이 데이터의 평균이 53보다 크다고 할 수 없다.')
 
 # 문제 5
 
@@ -198,6 +340,11 @@ B = np.array([70, 68, 69, 71, 67, 72, 70, 69])
 # 대립가설
 # 결론
 
+stat, pvalue = stats.ttest_ind(A, B, alternative = 'two-sided')
+print(stat, pvalue)
+print('귀무가설: 차이가 없다, 대립가설: 차이가 있다')
+print('pvalue가 유의수준인 0.05보다 작기 때문에 귀무가설을 기각한다. 두 그룹의 평균에 차이가 있다.')
+
 # 문제 6
 import numpy as np
 from scipy import stats
@@ -213,6 +360,10 @@ after = np.array([78, 80, 75, 82, 80, 79, 76, 81])
 # 대립가설
 # 결론
 
+stat, pvalue = stats.ttest_rel(after, before, alternative ='less')
+print(stat, pvalue)
+print('귀무가설: 감소하지 않았다. 대립가설: 감소했다')
+print('pvalue가 유의수준인 0.05보다 작기 때문에 귀무가설을 기각한다. 이후 값이 이전 값보다 감소했다고 할 수 있다.')
 # 문제 7
 import numpy as np
 from scipy import stats
@@ -234,6 +385,13 @@ table = np.array([
 # 대립가설
 # 결론
 
+stat, pvalue, df, expected = stats.chi2_contingency(table)
+print(stat)
+print(pvalue)
+print(df)
+print(expected)
+print('귀무가설: 관련이 있다, 대립가설: 관련이 없다')
+print('pvalue가 유의수준인 0.05보다 작기 때문에 귀무가설을 기각한다. 지역과 선택 여부가 서로 관련이 있다고 볼 수 없다')
 # 문제 8
 import numpy as np
 from scipy import stats
@@ -249,6 +407,10 @@ expected = np.repeat(20, 5)
 # 대립가설
 # 결론
 
+stat, pvalue = stats.chisquare(observed, f_exp = expected)
+print(stat, pvalue)
+print('귀무가설: 빈도 차이가 없다, 대립가설: 빈도 차이가 있다')
+print('pvalue가 유의수준인 0.05보다 크기 때문에 귀무가설을 기각할 수 없다. 즉, 빈도 차이가 있다고 볼 충분한 근거가 없다.')
 # 문제 9
 import numpy as np
 from scipy import stats
@@ -266,6 +428,11 @@ g4 = np.array([80, 79, 81, 82, 83])
 # 대립가설
 # 결론
 
+stat, pvalue = stats.f_oneway(g1, g2, g3, g4)
+print(stat, pvalue)
+print('귀무가설: 평균이 같다. 대립가설: 평균이 다르다')
+print('pvalue가 유의수준인 0.05보다 작기 때문에 귀무가설을 기각한다. 즉 네 그룹의 평균이 모두 가타고 볼 충분한 근거가 없다.')
+
 # 문제 10
 import numpy as np
 from scipy import stats
@@ -279,6 +446,11 @@ sample = np.array([10.2, 9.8, 10.5, 10.1, 9.9, 10.3, 10.4, 9.7, 10.0, 10.2])
 # 귀무가설
 # 대립가설
 # 결론
+
+stat, pvalue = stats.shapiro(sample)
+print(stat, pvalue)
+print('귀무가설: 정규분포를 따른다, 대립가설: 정규분포를 따르지 않는다.')
+print('pvalue가 유의 수준인 0.05보다 크기 때문에 귀무가설을 기각할 수 없다. 따라서 정규분포를 따른다고 볼 수 있다.')
 
 # 문제 11
 import numpy as np
@@ -294,6 +466,8 @@ x2 = np.array([50, 55, 52, 58, 57, 54])
 # 귀무가설
 # 대립가설
 # 결론
+
+
 
 # 문제 12
 import pandas as pd
@@ -332,6 +506,25 @@ print(df.head())
 # 회귀계수가 가장 큰 변수명과 값
 # x1=12, x2=28, x3=110, x4=6일 때 예측값
 
+X = df.drop(columns = 'y')
+y = df['y']
+X = sm.add_constant(X)
+model = sm.OLS(y, X).fit()
+print(model.summary())
+print(model.rsquared)
+print(model.rsquared_adj)
+print(model.pvalues.drop('const').idxmax(), model.pvalues.drop('const').max())
+print((model.pvalues.drop('const') < 0.05).sum())
+print(model.params.drop('const').idxmax(), model.params.drop('const').max())
+new_data = pd.DataFrame({
+    'x1' : [12],
+    'x2' : [28],
+    'x3' : [110],
+    'x4' : [6]
+})
+new_data = sm.add_constant(new_data, has_constant = 'add')
+print(model.predict(new_data).iloc[0])
+
 # 문제 13
 import pandas as pd
 import numpy as np
@@ -365,15 +558,30 @@ df['target'] = (prob > 0.55).astype(int)
 print(df.head())
 print(df['target'].value_counts())
 # 13-1 target을 종속변수로 하고 a만 독립변수로 하는 모형을 적합한 뒤, a의 오즈비를 출력하시오.
-
+X = df[['a']]
+y = df['target']
+X = sm.add_constant(X)
+model = sm.Logit(y, X).fit()
+print(np.exp(model.params)['a'])
 # 13-2 target을 종속변수로 하고 모든 변수를 독립변수로 하는 모형을 적합한 뒤, residual deviance를 출력하시오.
-
+X = df.drop(columns = 'target')
+y = df['target']
+X = sm.add_constant(X)
+model = sm.Logit(y, X).fit()
+print(-2 * model.llf)
 # 13-3 모든 변수를 사용한 모형에서 p-value가 0.05 이상인 변수 개수를 출력하시오.
 # 단, 상수항은 제외하시오.
-
+cnt = (model.pvalues.drop('const') >= 0.05).sum()
+print(cnt)
 # 13-4 p-value가 0.05 미만인 변수만 사용해서 다시 적합하고, 해당 변수들의 회귀계수 평균을 출력하시오.
 # 단, 상수항은 평균 계산에서 제외하시오.
-
+pvalues = model.pvalues.drop('const')
+sig_var = pvalues[pvalues < 0.05].index
+X = df[list(sig_var)]
+y = df['target']
+X = sm.add_constant(X)
+model = sm.Logit(y, X).fit()
+print(model.params.drop('const').mean())
 # 13-5 데이터를 학습/평가로 나누시오.
 
 # 조건:
@@ -382,4 +590,27 @@ print(df['target'].value_counts())
 # 모든 변수를 사용하여 평가 데이터의 오분류율을 출력하시오.
 # 예측확률이 0.5 이상이면 1로 판단하시오.
 
+X = df.drop(columns = 'target')
+y = df['target']
+X = sm.add_constant(X)
+
+from sklearn.model_selection import train_test_split
+train_X, test_X, train_y, test_y = train_test_split(
+    X,
+    y,
+    test_size = 80,
+    random_state = 42,
+    stratify = y
+)
+
+from sklearn.metrics import accuracy_score
+model = sm.Logit(train_y, train_X).fit()
+pred = model.predict(test_X)
+pred = (pred >= 0.5).astype(int)
+print(1 - accuracy_score(test_y, pred))
+
 # 13-6 13-5의 평가 데이터에서 AUC를 출력하시오.
+
+from sklearn.metrics import roc_auc_score
+pred = model.predict(test_X)
+print(roc_auc_score(test_y, pred))
